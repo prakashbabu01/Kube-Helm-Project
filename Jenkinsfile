@@ -8,12 +8,10 @@ pipeline
       jdk "OracleJDK8"
   }
 
-    environment {            //connect to aws ECR and these are environment variables
-        registryCredential = 'ecr:us-east-1:awscredsjenkins_awscreds'  // jenkins aws credential to access from jenkins to aws stored in jenkins
-        appRegistry = "107440719127.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg" // its registyurlname/repo name in awr.
-        vprofileRegistry = "https://107440719127.dkr.ecr.us-east-1.amazonaws.com"  // registryurl name from above
-        cluster = "vprofile_container_service_cluster"
-        service = "vprofile-ecs-svc"
+    environment {            // environment variables
+        appRegistry = "prakashbabu9327/vpro-webapp-cicd" //this is just a image artifact value to build docker image
+        registryCredential = "dockerhub" // credential from manage credentials in jenkins for login to docker hub
+
     }
 
     stages
@@ -42,7 +40,7 @@ pipeline
 
         stage('Build'){
                     steps {
-                        sh 'mvn install -DskipTests'  //
+                        sh 'mvn clean install -DskipTests'
                     }
 
                 }
@@ -53,7 +51,7 @@ pipeline
        steps {
 
          script {
-                dockerImage = docker.build( appRegistry + ":$BUILD_NUMBER", "./Docker-files/app/multistage/")
+                dockerImage = docker.build( appRegistry + ":$BUILD_NUMBER", ".")
              }
 
      }
@@ -61,23 +59,39 @@ pipeline
     }
 
     stage('Upload App Image') {
+           steps {
+
+             script {
+                    docker.withRegistry ('',registryCredential) {
+                    dockerImage.push("$BUILD_NUMBER")
+                    dockerImage.push('latest')
+
+                    }
+                 }
+
+         }
+
+        }
+
+    stage('Remove unused docker image') {
           steps{
-            script {
-              docker.withRegistry( vprofileRegistry, registryCredential ) {
-                dockerImage.push("$BUILD_NUMBER")
-                dockerImage.push('latest')
-              }
-            }
+            sh "docker rmi $appRegistry:$BUILD_NUMBER"
           }
      }
 
-stage('Deploy to ecs') {
-          steps {
-        withAWS(credentials: 'awscredsjenkins_awscreds', region: 'us-east-1') {
-          sh 'aws ecs update-service --cluster ${cluster} --service ${service} --force-new-deployment'
-        }
-      }
+     stage('Kubernetes Deploy') {
+     agent { label 'kops-slave-lbl' }
+     steps {
+     sh "helm upgrade vpro-app-deploy kubeproject-helm/Kube-Helm-Project/Helm/myvpro-chart --install --force --set imgname=$appRegistry:$BUILD_NUMBER  --namespace prod"
      }
+// upgrade and force install if vpro-app-deploy is not existing already
+ //chart name along with path from home directory :  kubeproject-helm/Kube-Helm-Project/Helm/myvpro-chart
+//vpro-app-deploy is name of release
+
+     }
+
+
+
 
   }
 }
