@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vproapp
+  labels:
+    app: vproapp
+spec:
+  selector:
+    matchLabels:
+      app: vproapp
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vproapp
+    spec:
+      containers:
+        - name: vproapp
+          image: prakashbabu9327/vproapp-tom-image:v1
+          ports:
+            - containerPort: 8080
+              name: vproapp-port
+      initContainers:
+        - name: busybox-chekcfordb
+          image: busybox:1.28.4
+          args: ["sh","-c","until nslookup vprodb; do echo waiting-for-vprodb; sleep 2; done"]
